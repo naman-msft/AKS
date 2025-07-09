@@ -15,9 +15,9 @@ class LifecycleManager:
     def check_needs_attention(self, days=5):
         """Check issues that need attention after X days"""
         cutoff_date = datetime.now() - timedelta(days=days)
-        
-        # Check "Needs Author Information" labels
-        needs_info_issues = self.repo.get_issues(labels=['Needs Author Information'], state='open')
+
+        # Check "Needs Author Feedback" labels
+        needs_info_issues = self.repo.get_issues(labels=['Needs Author Feedback'], state='open')
         
         for issue in needs_info_issues:
             last_comment = None
@@ -28,7 +28,7 @@ class LifecycleManager:
             
             if not last_comment or last_comment.created_at < cutoff_date:
                 print(f"Issue #{issue.number} needs attention - no author response for {days} days")
-                issue.add_to_labels('Stale')
+                issue.add_to_labels('stale')
                 issue.create_comment(
                     f"This issue has been marked as stale because we haven't heard from you in {days} days. "
                     f"Please provide the requested information or this issue will be closed in 7 days."
@@ -43,7 +43,7 @@ class LifecycleManager:
         for issue in investigation_issues:
             if issue.created_at < cutoff_date:
                 print(f"Issue #{issue.number} has been under investigation for {days}+ days")
-                issue.add_to_labels('needs-attention', 'investigation-overdue')
+                issue.add_to_labels('Needs Attention :wave:', 'investigation-overdue')
                 
                 # Find assignees and mention them
                 assignees = issue.assignees
@@ -58,13 +58,13 @@ class LifecycleManager:
         """Close issues that have been stale for X days"""
         cutoff_date = datetime.now() - timedelta(days=days)
         
-        stale_issues = self.repo.get_issues(labels=['Stale'], state='open')
+        stale_issues = self.repo.get_issues(labels=['stale'], state='open')
         
         for issue in stale_issues:
-            # Check when 'Stale' label was added
+            # Check when 'stale' label was added
             stale_event = None
             for event in issue.get_events():
-                if event.event == 'labeled' and event.label.name == 'Stale':
+                if event.event == 'labeled' and event.label.name == 'stale':
                     stale_event = event
                     break
             

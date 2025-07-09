@@ -140,24 +140,23 @@ Respond with JSON:
         # Add AI prefix if in recommend mode
         if self.config.get('ai_mode', 'auto') == 'recommend':
             if classification == "SUPPORT":
-                suggested_labels.extend(["ai-suggested-support", "ai-suggested-SR-Support-Request"])
+                suggested_labels.extend(["SR-Support Request"])
             elif classification == "INFO_NEEDED":
-                suggested_labels.extend(["ai-suggested-info-needed", "ai-suggested-Needs-Author-Information"])
+                suggested_labels.extend(["Needs Author Feedback"])
             elif classification == "BUG":
-                suggested_labels.extend(["ai-suggested-bug", "ai-suggested-needs-triage"])
+                suggested_labels.extend(["bug", "triage"])
             elif classification == "FEATURE":
-                suggested_labels.append("ai-suggested-feature")
+                suggested_labels.append("feature-request")
         else:
             # Original labels without prefix
             if classification == "SUPPORT":
-                suggested_labels.extend(["support", "SR-Support Request"])
+                suggested_labels.extend(["SR-Support Request"])
             elif classification == "INFO_NEEDED":
-                suggested_labels.extend(["info_needed", "Needs Author Information"])
+                suggested_labels.extend(["Needs Author Feedback"])
             elif classification == "BUG":
-                suggested_labels.extend(["bug", "needs-triage"])
+                suggested_labels.extend(["bug", "triage"])
             elif classification == "FEATURE":
-                suggested_labels.append("feature")
-        
+                suggested_labels.append("feature-request")        
         # Determine response template
         template_key = {
             "SUPPORT": "support_request",

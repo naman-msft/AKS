@@ -19,5 +19,26 @@
       "stale_closures": 0,
       "repair_items_created": 0
     }
+  },
+  {
+    "timestamp": "2025-07-09T00:46:53.789642",
+    "metrics": {
+      "period": "2025-07-02 to 2025-07-09",
+      "issues_created": 14,
+      "issues_closed": 2,
+      "ai_classifications": {
+        "bug": 3,
+        "feature": 1,
+        "info_needed": 1,
+        "support": 1
+      },
+      "human_overrides": 0,
+      "average_time_to_first_response": "0.7 minutes",
+      "issues_by_area": {},
+      "cri_issues": 1,
+      "duplicate_issues": 2,
+      "stale_closures": 0,
+      "repair_items_created": 0
+    }
   }
 ]

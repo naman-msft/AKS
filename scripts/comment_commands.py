@@ -16,7 +16,8 @@ class CommentCommandProcessor:
             '/mark-as-cri': self.mark_as_cri,
             '/create-repair-item': self.create_repair_item,
             '/mark-duplicate': self.mark_duplicate,
-            '/request-info': self.request_info
+            '/request-info': self.request_info,
+            '/add-label': self.add_label
         }
     
     def process_comment(self, issue_number: int, comment_id: int):
@@ -24,9 +25,23 @@ class CommentCommandProcessor:
         issue = self.repo.get_issue(issue_number)
         comment = issue.get_comment(comment_id)
         
-        # Only process comments from authorized users (maintainers)
-        if comment.author_association not in ['OWNER', 'MEMBER', 'COLLABORATOR']:
-            print(f"User {comment.user.login} not authorized to use commands")
+        # # Only process comments from authorized users (maintainers)
+        # if comment.author_association not in ['OWNER', 'MEMBER', 'COLLABORATOR']:
+        #     print(f"User {comment.user.login} not authorized to use commands")
+        #     return
+
+        # Only process comments from authorized users (check if user is repo owner or has write access)
+        if comment.user.login != self.repo.owner.login:
+            # Check if user has write access
+            try:
+                self.repo.has_in_collaborators(comment.user.login)
+            except:
+                print(f"Unauthorized user: {comment.user.login}")
+                return
+
+        # Or simpler - for testing, just check if it's you:
+        if comment.user.login not in ['aritraghosh', 'julia-yin', 'AllenWen-at-Azure', 'github-actions[bot]']:
+            print(f"Unauthorized user: {comment.user.login}")
             return
         
         for line in comment.body.split('\n'):
@@ -49,11 +64,11 @@ class CommentCommandProcessor:
             # Add new classification
             label_map = {
                 'BUG': 'bug',
-                'SUPPORT': 'SR-Support Request',
-                'FEATURE': 'feature',
-                'INFO_NEEDED': 'Needs Author Information'
+                'SUPPORT': 'SR-Support Request', 
+                'FEATURE': 'feature-request',  # Changed from 'feature'
+                'INFO_NEEDED': 'Needs Author Feedback'  # Changed from 'Needs Author Information'
             }
-            
+                        
             issue.add_to_labels(label_map[classification.upper()])
             issue.create_comment(f"✅ Classification overridden to: {classification.upper()}")
     
@@ -67,12 +82,21 @@ class CommentCommandProcessor:
             issue.create_comment(f"❌ Could not assign to @{username}: {str(e)}")
     
     def mark_as_cri(self, issue, severity='P0'):
-        """Mark issue as CRI"""
-        issue.add_to_labels('CRI', severity, 'needs-immediate-attention')
-        issue.create_comment(
-            f"🚨 This issue has been marked as a Customer Reported Incident ({severity}). "
-            f"On-call engineer has been notified."
-        )
+        """Mark issue as Customer Reported Incident"""
+        # Get current labels to avoid duplicates
+        current_labels = {label.name for label in issue.labels}
+        
+        # Add labels one by one if they don't exist
+        labels_to_add = ['CRI', severity, 'needs-immediate-attention']
+        for label in labels_to_add:
+            if label not in current_labels:
+                issue.add_to_labels(label)
+                print(f"Added label: {label}")
+            else:
+                print(f"Label already exists: {label}")
+        
+        # Add comment
+        issue.create_comment("🚨 This issue has been marked as a Customer Reported Incident (CRI) and requires immediate attention.")
     
     def mark_duplicate(self, issue, duplicate_number):
         """Mark as duplicate of another issue"""
@@ -107,7 +131,14 @@ class CommentCommandProcessor:
         
         response = templates.get(info_type, self.config['templates']['need_more_info'])
         issue.create_comment(response)
-        issue.add_to_labels('Needs Author Information')
+        issue.add_to_labels('Needs Author Feedback')
+
+    def add_label(self, issue, label_name):
+        """Add a label to the issue"""
+        if label_name:
+            issue.add_to_labels(label_name)
+            print(f"Added label: {label_name}")
+            issue.create_comment(f"✅ Added label: `{label_name}`")
 
 def main():
     # This would be called by a GitHub Action when comments are posted

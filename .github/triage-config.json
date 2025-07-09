@@ -1,23 +1,30 @@
 {
   "engineers": {
-    "networking": ["naman-msft"],
-    "storage": ["naman-msft"],
-    "compute": ["naman-msft"],
-    "cluster-upgrade": ["naman-msft"],
-    "container-registry": ["naman-msft"],
-    "security": ["naman-msft"]
+    "container-insights": ["ganga1980", "aritraghosh"],
+    "networking": ["@Azure/aks-pm"],
+    "storage": ["@Azure/aks-pm"],
+    "compute": ["@Azure/aks-pm"],
+    "cluster-upgrade": ["@Azure/aks-pm"],
+    "container-registry": ["@Azure/aks-pm"],
+    "security": ["@Azure/aks-pm"]
   },
-  "ai_mode": "recommend",
+  "ai_mode": "apply",
   "confidence_threshold": 0.9,
   "respect_human_labels": true,
   "use_ai_prefix": true,
+  "ai_settings": {
+    "confidence_threshold": 0.7,
+    "require_human_review_below": 0.5
+  },
   "on_call_rotation": {
     "schedule": "weekly",
     "current": "naman-msft"
   },
+  "v_team": ["aritraghosh", "julia-yin", "AllenWen-at-Azure"],
   "escalation_paths": {
-    "cri": ["naman-msft"],
-    "security": ["naman-msft"]
+    "cri": ["@Azure/aks-pm"],
+    "security": ["@Azure/aks-pm"],
+    "leads": ["@Azure/aks-leads"]
   },
   "auto_close_days": {
     "needs_info": 7,
