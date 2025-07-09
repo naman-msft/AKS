@@ -6,18 +6,13 @@ on:
   issue_comment:
     types: [created]
   workflow_dispatch:
-    inputs:
-      issue_number:
-        description: 'Issue number to triage'
-        required: false
 
 jobs:
   triage:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      contents: read
-      
+    # Don't run on issues created by bots
+    if: github.event.issue.user.type != 'Bot'
+    
     steps:
     - uses: actions/checkout@v3
     
@@ -28,10 +23,21 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install openai python-dotenv requests PyGithub
+        pip install PyGithub openai python-dotenv
     
-    - name: Triage New Issue
-      if: github.event_name == 'issues' && github.event.action == 'opened'
+    - name: Check if should triage
+      id: check_labels
+      run: |
+        # Check if issue already has classification labels
+        LABELS="${{ join(github.event.issue.labels.*.name, ',') }}"
+        if [[ "$LABELS" == *"bug"* ]] || [[ "$LABELS" == *"feature-request"* ]] || [[ "$LABELS" == *"SR-Support Request"* ]]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Triage Issue
+      if: steps.check_labels.outputs.skip == 'false'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
@@ -39,10 +45,13 @@ jobs:
         AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
       run: |
         python scripts/triage_enhanced.py ${{ github.event.issue.number }}
-    
+        
     - name: Process Comment Commands
       if: github.event_name == 'issue_comment'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        python scripts/comment_commands.py ${{ github.event.issue.number }} ${{ github.event.comment.id }}
+        # Check if comment contains commands
+        if echo "${{ github.event.comment.body }}" | grep -E "^/(override-classification|assign|mark-as-cri|create-repair-item|mark-duplicate|request-info)"; then
+          python scripts/comment_commands.py ${{ github.event.issue.number }} ${{ github.event.comment.id }}
+        fi

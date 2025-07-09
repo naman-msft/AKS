@@ -12,7 +12,7 @@ class LifecycleManager:
         self.github = Github(os.getenv('GITHUB_TOKEN'))
         self.repo = self.github.get_repo('naman-msft/AKS')
     
-    def check_needs_attention(self, days=7):
+    def check_needs_attention(self, days=5):
         """Check issues that need attention after X days"""
         cutoff_date = datetime.now() - timedelta(days=days)
         

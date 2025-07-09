@@ -135,13 +135,28 @@ Respond with JSON:
             suggested_assignees = self.config['engineers'][area][:1]
         
         # Determine labels
-        suggested_labels = [classification.lower()]
-        if classification == "SUPPORT":
-            suggested_labels.append("SR-Support Request")
-        elif classification == "INFO_NEEDED":
-            suggested_labels.append("Needs Author Information")
-        elif classification == "BUG":
-            suggested_labels.extend(["bug", "needs-triage"])
+        suggested_labels = []
+        
+        # Add AI prefix if in recommend mode
+        if self.config.get('ai_mode', 'auto') == 'recommend':
+            if classification == "SUPPORT":
+                suggested_labels.extend(["ai-suggested-support", "ai-suggested-SR-Support-Request"])
+            elif classification == "INFO_NEEDED":
+                suggested_labels.extend(["ai-suggested-info-needed", "ai-suggested-Needs-Author-Information"])
+            elif classification == "BUG":
+                suggested_labels.extend(["ai-suggested-bug", "ai-suggested-needs-triage"])
+            elif classification == "FEATURE":
+                suggested_labels.append("ai-suggested-feature")
+        else:
+            # Original labels without prefix
+            if classification == "SUPPORT":
+                suggested_labels.extend(["support", "SR-Support Request"])
+            elif classification == "INFO_NEEDED":
+                suggested_labels.extend(["info_needed", "Needs Author Information"])
+            elif classification == "BUG":
+                suggested_labels.extend(["bug", "needs-triage"])
+            elif classification == "FEATURE":
+                suggested_labels.append("feature")
         
         # Determine response template
         template_key = {
@@ -257,3 +272,18 @@ Respond with JSON:
             result.suggested_response = "🔒 This issue may have security implications. Our security team has been notified for review.\n\n" + result.suggested_response
         
         return result
+    
+    def should_ai_classify(self, issue_labels: List[str]) -> bool:
+        """Check if AI should classify or defer to human labels"""
+        # Don't override human classifications
+        human_classification_labels = ['bug', 'feature-request', 'SR-Support Request', 
+                                    'documentation', 'question', 'test-issue']
+        if any(label in issue_labels for label in human_classification_labels):
+            return False
+        
+        # Don't process if already being handled
+        handling_labels = ['Under Investigation', 'fixing', 'resolution/fix-released']
+        if any(label in issue_labels for label in handling_labels):
+            return False
+            
+        return True

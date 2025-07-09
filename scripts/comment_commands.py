@@ -25,7 +25,8 @@ class CommentCommandProcessor:
         comment = issue.get_comment(comment_id)
         
         # Only process comments from authorized users (maintainers)
-        if not comment.user.has_permission('push'):
+        if comment.author_association not in ['OWNER', 'MEMBER', 'COLLABORATOR']:
+            print(f"User {comment.user.login} not authorized to use commands")
             return
         
         for line in comment.body.split('\n'):
@@ -85,6 +86,28 @@ class CommentCommandProcessor:
             issue.edit(state='closed')
         except:
             issue.create_comment(f"❌ Could not find issue #{duplicate_number}")
+    
+    def create_repair_item(self, issue, args):
+        """Remind to create repair item"""
+        issue.create_comment(
+            "📋 Please create a repair item in Azure DevOps using this template:\n"
+            "https://aka.ms/aks/github-repair-item\n\n"
+            "Once created, link it here with:\n"
+            "```\nRepair Item: [ADO-12345](https://dev.azure.com/...)\n```"
+        )
+        issue.add_to_labels('needs-repair-item')
+
+    def request_info(self, issue, info_type):
+        """Request specific information"""
+        templates = {
+            'logs': "Please provide the pod logs using:\n```\nkubectl logs -n <namespace> <pod-name>\n```",
+            'version': "Please provide your AKS version:\n```\naz aks show -g <resource-group> -n <cluster-name> --query kubernetesVersion\n```",
+            'yaml': "Please share your deployment YAML files (remove any sensitive data)"
+        }
+        
+        response = templates.get(info_type, self.config['templates']['need_more_info'])
+        issue.create_comment(response)
+        issue.add_to_labels('Needs Author Information')
 
 def main():
     # This would be called by a GitHub Action when comments are posted

@@ -7,6 +7,10 @@
     "container-registry": ["naman-msft"],
     "security": ["naman-msft"]
   },
+  "ai_mode": "recommend",
+  "confidence_threshold": 0.9,
+  "respect_human_labels": true,
+  "use_ai_prefix": true,
   "on_call_rotation": {
     "schedule": "weekly",
     "current": "naman-msft"
@@ -16,8 +20,9 @@
     "security": ["naman-msft"]
   },
   "auto_close_days": {
-    "needs_info": 14,
-    "stale": 7
+    "needs_info": 7,
+    "stale": 7,
+    "feature_request": 180
   },
   "keywords": {
     "networking": ["network", "ingress", "load balancer", "dns", "cni", "service mesh"],

@@ -32,6 +32,12 @@ def main(issue_number):
         azure_key=os.getenv('AZURE_OPENAI_KEY'),
         deployment_name=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
     )
+
+    # Check if AI should process this issue
+    existing_labels = [label.name for label in issue.labels]
+    if not classifier.should_ai_classify(existing_labels):
+        print(f"⚠️  Issue already classified by human, skipping AI classification")
+        return
     
     # Prepare issue data
     issue_data = {
