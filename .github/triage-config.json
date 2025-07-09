@@ -4,27 +4,36 @@
     "storage": ["naman-msft"],
     "compute": ["naman-msft"],
     "cluster-upgrade": ["naman-msft"],
-    "container-registry": ["naman-msft"]
+    "container-registry": ["naman-msft"],
+    "security": ["naman-msft"]
+  },
+  "on_call_rotation": {
+    "schedule": "weekly",
+    "current": "naman-msft"
+  },
+  "escalation_paths": {
+    "cri": ["naman-msft"],
+    "security": ["naman-msft"]
+  },
+  "auto_close_days": {
+    "needs_info": 14,
+    "stale": 7
   },
   "keywords": {
-    "networking": ["network", "ingress", "load balancer", "service", "endpoint", "dns"],
-    "storage": ["disk", "volume", "pvc", "persistent", "mount"],
-    "compute": ["node", "scaling", "cpu", "memory", "gpu"],
-    "cluster-upgrade": ["upgrade", "version", "update"],
-    "container-registry": ["acr", "image", "pull", "registry", "container"]
+    "networking": ["network", "ingress", "load balancer", "dns", "cni", "service mesh"],
+    "storage": ["disk", "volume", "pvc", "persistent", "storage class", "mount"],
+    "compute": ["node", "scaling", "cpu", "memory", "gpu", "autoscaler"],
+    "cluster-upgrade": ["upgrade", "version", "kubernetes version", "update"],
+    "container-registry": ["acr", "image pull", "registry", "container", "docker"],
+    "security": ["rbac", "security", "permission", "authentication", "authorization"]
   },
   "templates": {
-    "support_request": "Thank you for reporting this issue. To better assist you, please open a support ticket at https://azure.microsoft.com/support/create-ticket/. This will allow our support team to gather cluster-specific information and provide personalized assistance.\n\nPlease include the following in your support ticket:\n- Subscription ID\n- Cluster name\n- Issue description\n- Steps to reproduce\n\nOnce you've created the ticket, please comment here with the case number for tracking.",
+    "support_request": "Thank you for reporting this issue. To better assist you, please open a support ticket at https://azure.microsoft.com/support/create-ticket/. This will allow our support team to gather cluster-specific information and provide personalized assistance.\n\nIn the meantime, you may find these resources helpful:\n- [AKS Troubleshooting Guide](https://docs.microsoft.com/azure/aks/troubleshooting)\n- [AKS Best Practices](https://docs.microsoft.com/azure/aks/best-practices)",
     "bug_acknowledged": "Thank you for reporting this issue. We've identified this as a potential bug and our engineering team will investigate.\n\nWe'll keep you updated on our progress. The issue has been added to our backlog for prioritization.",
-    "need_more_info": "Thank you for reporting this issue. To help us better understand and address your concern, could you please provide:\n\n- AKS cluster version\n- Region where the cluster is deployed\n- Detailed steps to reproduce the issue\n- Any error messages or logs\n- When did this issue start occurring?\n\nThis information will help us investigate more effectively.",
-    "fix_released": "Good news! A fix for this issue has been released and is rolling out to all regions. You should see the fix applied to your cluster within the next 3 weeks.\n\nIf you continue to experience issues after this time, please let us know.",
-    "duplicate_issue": "Thank you for reporting this. This appears to be related to an existing issue: #{existing_issue_number}. We're tracking the problem there.\n\nPlease subscribe to the existing issue for updates. We'll close this one to keep the discussion centralized."
-  },
-  "v_team": ["@julia-yin", "@aritra-ghosh", "@allen-wen", "@reshmi-mangalore"],
-  "time_limits": {
-    "needs_author_feedback_days": 7,
-    "stale_close_days": 7,
-    "investigation_update_days": 7,
-    "investigation_attention_days": 14
+    "need_more_info": "Thank you for reporting this issue. To help us better understand and address your concern, could you please provide:\n\n- AKS cluster version\n- Region where the cluster is deployed\n- Detailed steps to reproduce the issue\n- Any error messages or logs\n- Expected vs actual behavior\n\nThis information will help us investigate more effectively.",
+    "feature_request": "Thank you for your feature request. We appreciate your feedback and will consider this for future releases.\n\nPlease vote for this issue to help us prioritize. You can also track our roadmap at [AKS Roadmap](https://aka.ms/aks/roadmap).",
+    "duplicate": "This issue appears to be a duplicate. Please follow the original issue for updates.\n\nIf you believe this is not a duplicate, please provide additional details that distinguish your issue.",
+    "cri_response": "🚨 **Critical Issue Identified**\n\nThis issue has been escalated to our on-call team for immediate attention. You should expect a response within 2 hours.\n\nIn the meantime, please ensure you have:\n- Opened a support ticket if you haven't already\n- Provided all relevant cluster information\n- Included any workarounds you've tried",
+    "security_response": "🔒 **Security Review Required**\n\nThis issue may have security implications and has been flagged for security team review.\n\nFor security-related issues, please also consider:\n- Reporting through our responsible disclosure process\n- Not including sensitive information in public comments\n- Opening a private support ticket for detailed discussion"
   }
 }

@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": "2025-07-08T21:04:49.545012",
+    "metrics": {
+      "period": "2025-07-01 to 2025-07-08",
+      "issues_created": 5,
+      "issues_closed": 0,
+      "ai_classifications": {
+        "bug": 2,
+        "feature": 1,
+        "info_needed": 1,
+        "support": 1
+      },
+      "human_overrides": 0,
+      "average_time_to_first_response": "3.2 minutes",
+      "issues_by_area": {},
+      "cri_issues": 0,
+      "duplicate_issues": 0,
+      "stale_closures": 0,
+      "repair_items_created": 0
+    }
+  }
+]

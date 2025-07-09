@@ -3,6 +3,8 @@ name: AI Issue Triage
 on:
   issues:
     types: [opened]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -28,11 +30,19 @@ jobs:
       run: |
         pip install openai python-dotenv requests PyGithub
     
-    - name: Triage Issue
+    - name: Triage New Issue
+      if: github.event_name == 'issues' && github.event.action == 'opened'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
         AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
         AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
       run: |
-        python scripts/triage_github_issue.py ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        python scripts/triage_enhanced.py ${{ github.event.issue.number }}
+    
+    - name: Process Comment Commands
+      if: github.event_name == 'issue_comment'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python scripts/comment_commands.py ${{ github.event.issue.number }} ${{ github.event.comment.id }}

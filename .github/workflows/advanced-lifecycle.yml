@@ -1,0 +1,49 @@
+name: Advanced Issue Lifecycle Management
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:
+
+jobs:
+  lifecycle-management:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+      
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install PyGithub python-dotenv
+    
+    - name: Check 7-day stale issues
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python scripts/lifecycle_manager.py --days 7 --action needs-attention
+    
+    - name: Check 14-day investigations
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python scripts/lifecycle_manager.py --days 14 --action escalate
+    
+    - name: Close 14-day stale issues
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python scripts/lifecycle_manager.py --days 7 --action close-stale
+    
+    - name: Check missing repair items
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        python scripts/check_repair_items.py

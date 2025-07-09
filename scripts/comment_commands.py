@@ -1,0 +1,100 @@
+import os
+import re
+from github import Github
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class CommentCommandProcessor:
+    def __init__(self):
+        self.github = Github(os.getenv('GITHUB_TOKEN'))
+        self.repo = self.github.get_repo('naman-msft/AKS')
+        
+        self.commands = {
+            '/override-classification': self.override_classification,
+            '/assign': self.assign_user,
+            '/mark-as-cri': self.mark_as_cri,
+            '/create-repair-item': self.create_repair_item,
+            '/mark-duplicate': self.mark_duplicate,
+            '/request-info': self.request_info
+        }
+    
+    def process_comment(self, issue_number: int, comment_id: int):
+        """Process commands in a comment"""
+        issue = self.repo.get_issue(issue_number)
+        comment = issue.get_comment(comment_id)
+        
+        # Only process comments from authorized users (maintainers)
+        if not comment.user.has_permission('push'):
+            return
+        
+        for line in comment.body.split('\n'):
+            line = line.strip()
+            for cmd, handler in self.commands.items():
+                if line.startswith(cmd):
+                    args = line[len(cmd):].strip()
+                    handler(issue, args)
+    
+    def override_classification(self, issue, classification):
+        """Override AI classification"""
+        valid_classifications = ['BUG', 'SUPPORT', 'FEATURE', 'INFO_NEEDED']
+        
+        if classification.upper() in valid_classifications:
+            # Remove existing classification labels
+            for label in issue.labels:
+                if label.name in ['bug', 'support', 'feature', 'info_needed']:
+                    issue.remove_from_labels(label)
+            
+            # Add new classification
+            label_map = {
+                'BUG': 'bug',
+                'SUPPORT': 'SR-Support Request',
+                'FEATURE': 'feature',
+                'INFO_NEEDED': 'Needs Author Information'
+            }
+            
+            issue.add_to_labels(label_map[classification.upper()])
+            issue.create_comment(f"✅ Classification overridden to: {classification.upper()}")
+    
+    def assign_user(self, issue, username):
+        """Assign issue to user"""
+        username = username.strip('@')
+        try:
+            issue.add_to_assignees(username)
+            issue.create_comment(f"✅ Assigned to @{username}")
+        except Exception as e:
+            issue.create_comment(f"❌ Could not assign to @{username}: {str(e)}")
+    
+    def mark_as_cri(self, issue, severity='P0'):
+        """Mark issue as CRI"""
+        issue.add_to_labels('CRI', severity, 'needs-immediate-attention')
+        issue.create_comment(
+            f"🚨 This issue has been marked as a Customer Reported Incident ({severity}). "
+            f"On-call engineer has been notified."
+        )
+    
+    def mark_duplicate(self, issue, duplicate_number):
+        """Mark as duplicate of another issue"""
+        try:
+            duplicate_issue = self.repo.get_issue(int(duplicate_number))
+            issue.add_to_labels('duplicate')
+            issue.create_comment(
+                f"This issue has been marked as a duplicate of #{duplicate_number}\n"
+                f"Original issue: {duplicate_issue.title}"
+            )
+            issue.edit(state='closed')
+        except:
+            issue.create_comment(f"❌ Could not find issue #{duplicate_number}")
+
+def main():
+    # This would be called by a GitHub Action when comments are posted
+    import sys
+    if len(sys.argv) != 3:
+        print("Usage: comment_commands.py <issue_number> <comment_id>")
+        return
+    
+    processor = CommentCommandProcessor()
+    processor.process_comment(int(sys.argv[1]), int(sys.argv[2]))
+
+if __name__ == "__main__":
+    main()
