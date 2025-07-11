@@ -23,7 +23,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install PyGithub openai python-dotenv azure-identity
+        pip install PyGithub openai python-dotenv azure-identity requests
 
     - name: Check if should triage
       id: check_labels
@@ -36,19 +36,23 @@ jobs:
           echo "skip=false" >> $GITHUB_OUTPUT
         fi
     
-    - name: Copy Wiki Assistant Resources
+    - name: Create Wiki Assistant Resources
       run: |
-        # Copy the vector store and assistant IDs to the working directory
-        cp /path/to/vector_store_id.json .
-        cp /path/to/assistant_id.json .
+        # Create vector store and assistant ID files from secrets
+        echo '{"vector_store_id": "${{ secrets.VECTOR_STORE_ID }}"}' > vector_store_id.json
+        echo '{"assistant_id": "${{ secrets.ASSISTANT_ID }}"}' > assistant_id.json
         
+        # Create wiki URL mapping (placeholder - in production you'd include the actual mapping)
+        echo '{}' > wiki_url_mapping.json
+
     - name: Triage Issue
       if: steps.check_labels.outputs.skip == 'false'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-        AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+        AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
         AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+        USE_MOCK_API: ${{ secrets.USE_MOCK_API || 'false' }}
       run: |
         python scripts/triage_enhanced.py ${{ github.event.issue.number }}
         
