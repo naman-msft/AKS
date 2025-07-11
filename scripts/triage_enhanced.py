@@ -58,9 +58,37 @@ def main(issue_number):
         issue.add_to_labels(*result.suggested_labels)
         print(f"✓ Applied labels: {', '.join(result.suggested_labels)}")
         
-        # Post response
-        issue.create_comment(result.suggested_response)
-        print("✓ Posted response")
+        # Post classification comment with wiki integration
+        comment = f"🤖 **AI Issue Analysis**\n\n"
+        comment += f"**Classification**: {result.classification}\n"
+        comment += f"**Confidence**: {result.confidence:.2%}\n"
+        comment += f"**Area**: {result.suggested_area}\n"
+
+        # Add wiki response if available
+        if hasattr(result, 'wiki_response') and result.wiki_response and result.wiki_response.get('found_relevant_docs'):
+            comment += "\n---\n\n"
+            comment += "## 📖 Relevant Documentation Found\n\n"
+            comment += result.wiki_response['response']
+            comment += f"\n\n*Found {result.wiki_response['citations_count']} relevant documentation pages*"
+        elif result.classification in ['BUG', 'SUPPORT']:
+            comment += "\n---\n\n"
+            comment += "## 📖 Documentation Search\n\n"
+            comment += "I searched our documentation but couldn't find specific information about this issue. "
+            comment += "This might be a new issue or require further investigation.\n"
+
+        # Add specific guidance based on classification
+        if result.classification == 'SUPPORT':
+            comment += "\n\n### 🎫 Next Steps\n"
+            comment += "Since this appears to be a support request, please:\n"
+            comment += "1. Review the documentation links above (if any)\n"
+            comment += "2. If the issue persists, [create a support ticket](https://azure.microsoft.com/support/create-ticket/)\n"
+        elif result.classification == 'BUG':
+            comment += "\n\n### 🐛 Bug Report Received\n"
+            comment += "Thank you for reporting this issue. Our team will investigate and provide updates.\n"
+
+        # Post the enhanced comment
+        issue.create_comment(comment)
+        print("✓ Posted enhanced response with wiki integration")
         
         # Handle assignments
         if result.suggested_assignees:

@@ -47,5 +47,14 @@
     "duplicate": "This issue appears to be a duplicate. Please follow the original issue for updates.\n\nIf you believe this is not a duplicate, please provide additional details that distinguish your issue.",
     "cri_response": "🚨 **Critical Issue Identified**\n\nThis issue has been escalated to our on-call team for immediate attention. You should expect a response within 2 hours.\n\nIn the meantime, please ensure you have:\n- Opened a support ticket if you haven't already\n- Provided all relevant cluster information\n- Included any workarounds you've tried",
     "security_response": "🔒 **Security Review Required**\n\nThis issue may have security implications and has been flagged for security team review.\n\nFor security-related issues, please also consider:\n- Reporting through our responsible disclosure process\n- Not including sensitive information in public comments\n- Opening a private support ticket for detailed discussion"
+  },
+  "wiki_assistant": {
+    "enabled": true,
+    "validate_links": true,
+    "link_validation_timeout": 5,
+    "search_for_classifications": ["BUG", "SUPPORT", "INFO_NEEDED"],
+    "max_response_length": 2000,
+    "include_citations": true,
+    "fallback_message": "I couldn't find specific documentation for this issue."
   }
 }

@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from openai import AzureOpenAI
 from difflib import SequenceMatcher
 import re
-
+try:
+    from .wiki_assistant import WikiAssistant
+except ImportError:
+    WikiAssistant = None
+    
 @dataclass
 class ClassificationResult:
     classification: str
@@ -18,8 +22,9 @@ class ClassificationResult:
     suggested_areas: List[str] = None
     primary_area: str = None
     is_cri: bool = False
-    duplicate_of: Optional[int] = None  # Add this field
+    duplicate_of: Optional[int] = None 
     similar_issues: List[Dict] = None 
+    wiki_response: Optional[Dict] = None
 
 class IssueClassifier:
     def __init__(self, config_path: str, azure_endpoint: str, azure_key: str, deployment_name: str):
@@ -38,6 +43,14 @@ class IssueClassifier:
         
         with open(config_path, 'r') as f:
             self.config = json.load(f)
+        
+        try:
+            self.wiki_assistant = WikiAssistant()
+            self.wiki_enabled = True
+        except Exception as e:
+            print(f"Wiki assistant not available: {e}")
+            self.wiki_assistant = None
+            self.wiki_enabled = False
     
     # Around line 47-49, update the classify_issue method:
     def classify_issue(self, issue: Dict) -> ClassificationResult:
@@ -55,6 +68,18 @@ class IssueClassifier:
         # Parse response and determine actions
         result = self._parse_classification_response(response, issue)
         
+        wiki_response = None
+        if self.wiki_enabled and result.classification in ['BUG', 'SUPPORT', 'INFO_NEEDED']:
+            try:
+                wiki_response = self.wiki_assistant.search_and_answer(
+                    issue['title'], 
+                    issue['body']
+                )
+            except Exception as e:
+                print(f"Wiki search failed: {e}")
+        
+        # Add wiki response to result
+        result.wiki_response = wiki_response
         return result
     
     def _create_classification_prompt(self, issue: Dict) -> str:

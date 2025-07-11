@@ -23,8 +23,8 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install PyGithub openai python-dotenv
-    
+        pip install PyGithub openai python-dotenv azure-identity
+
     - name: Check if should triage
       id: check_labels
       run: |
@@ -36,6 +36,12 @@ jobs:
           echo "skip=false" >> $GITHUB_OUTPUT
         fi
     
+    - name: Copy Wiki Assistant Resources
+      run: |
+        # Copy the vector store and assistant IDs to the working directory
+        cp /path/to/vector_store_id.json .
+        cp /path/to/assistant_id.json .
+        
     - name: Triage Issue
       if: steps.check_labels.outputs.skip == 'false'
       env:
