@@ -42,8 +42,9 @@ jobs:
         echo '{"vector_store_id": "${{ secrets.VECTOR_STORE_ID }}"}' > vector_store_id.json
         echo '{"assistant_id": "${{ secrets.ASSISTANT_ID }}"}' > assistant_id.json
         
-        # Create wiki URL mapping (placeholder - in production you'd include the actual mapping)
-        echo '{}' > wiki_url_mapping.json
+        # Wiki URL mapping is now in the repo
+        ls -la wiki_url_mapping.json
+        echo "Wiki mapping has $(wc -l < wiki_url_mapping.json) entries"
 
     - name: Triage Issue
       if: steps.check_labels.outputs.skip == 'false'
