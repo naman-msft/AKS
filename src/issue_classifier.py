@@ -183,8 +183,7 @@ class IssueClassifier:
             messages=[
                 {"role": "system", "content": "You are an expert at classifying AKS GitHub issues."},
                 {"role": "user", "content": prompt}
-            ],
-            temperature=0.3
+            ]
         )
         
         return json.loads(response.choices[0].message.content)
