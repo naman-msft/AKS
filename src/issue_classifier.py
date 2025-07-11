@@ -38,7 +38,7 @@ class IssueClassifier:
             self.client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=azure_key,
-                api_version="2024-02-15-preview"
+                api_version="2024-12-01-preview"
             )
         
         with open(config_path, 'r') as f:
