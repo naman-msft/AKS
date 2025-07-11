@@ -83,29 +83,44 @@ class IssueClassifier:
         return result
     
     def _create_classification_prompt(self, issue: Dict) -> str:
-        return f"""You are an AKS (Azure Kubernetes Service) issue classifier. Analyze the following issue and classify it.
+        return f"""You are an AKS (Azure Kubernetes Service) issue classifier. Analyze the following issue and classify it according to AKS triage guidelines.
 
-Issue Title: {issue['title']}
-Issue Body: {issue['body']}
+    Issue Title: {issue['title']}
+    Issue Body: {issue['body']}
 
-Classify as one of:
-1. BUG - Clear product defect with reproducible steps
-2. SUPPORT - Customer-specific issue needing investigation  
-3. INFO_NEEDED - Insufficient information to classify
-4. DUPLICATE - Similar to existing issue
-5. FEATURE - Feature request, not a bug
+    Classification Guidelines:
+    1. BUG - Product defects, reproducible errors, crashes, parsing issues, configuration problems
+    → Gets: bug + triage labels (internal investigation)
+    
+    2. SUPPORT - Customer-specific issues, how-to questions, configuration help, best practices
+    → Gets: SR-Support Request label (customer opens support ticket)
+    
+    3. INFO_NEEDED - Insufficient information, vague descriptions, missing critical details
+    → Gets: Needs Author Feedback label (7-day stale process)
+    
+    4. FEATURE - Feature requests, enhancements, new functionality
+    → Gets: feature-request label
+    
+    5. DUPLICATE - Similar to existing issue
+    → Gets: duplicate label
 
-Also identify the area from: {', '.join(self.config['keywords'].keys())}
+    Key Decision Points:
+    - YAML parsing errors, crashes, OOMKilled → BUG (product issue)
+    - "How to configure X", "Help with Y" → SUPPORT (customer needs guidance)
+    - "Pod not starting" with no details → INFO_NEEDED (insufficient info)
+    - "Add support for X" → FEATURE (enhancement)
 
-Respond with JSON:
-{{
-  "classification": "BUG|SUPPORT|INFO_NEEDED|DUPLICATE|FEATURE",
-  "confidence": 0.0-1.0,
-  "reasoning": "brief explanation",
-  "suggested_area": "area name",
-  "missing_info": ["list of missing details if applicable"]
-}}"""
+    Also identify the area from: {', '.join(self.config['keywords'].keys())}
 
+    Respond with JSON:
+    {{
+    "classification": "BUG|SUPPORT|INFO_NEEDED|DUPLICATE|FEATURE",
+    "confidence": 0.0-1.0,
+    "reasoning": "brief explanation",
+    "suggested_area": "area name",
+    "missing_info": ["list of missing details if applicable"]
+    }}"""
+    
     def _mock_classify(self, issue: Dict) -> Dict:
         """Mock classification for testing without API calls"""
         title_lower = issue['title'].lower()
@@ -149,52 +164,44 @@ Respond with JSON:
         return json.loads(response.choices[0].message.content)
     
     def _parse_classification_response(self, response: Dict, issue: Dict) -> ClassificationResult:
-        """Parse AI response and determine all actions"""
+        """Parse AI response and determine all actions based on official AKS bot behavior"""
         
         classification = response['classification']
-        area = response.get('suggested_area', 'other')  # Keep as fallback for API response
+        area = response.get('suggested_area', 'other')
         
         # Determine assignees
         suggested_assignees = []
         if classification == "BUG" and area in self.config['engineers']:
             suggested_assignees = self.config['engineers'][area][:1]
         
-        # Determine labels
+        # Determine labels based on official AKS bot documentation
         suggested_labels = []
         
-        # Add AI prefix if in recommend mode
-        if self.config.get('ai_mode', 'auto') == 'recommend':
-            if classification == "SUPPORT":
-                suggested_labels.extend(["SR-Support Request"])
-            elif classification == "INFO_NEEDED":
-                suggested_labels.extend(["Needs Author Feedback"])
-            elif classification == "BUG":
-                suggested_labels.extend(["bug", "triage"])
-            elif classification == "FEATURE":
-                suggested_labels.append("feature-request")
-        else:
-            # Original labels without prefix
-            if classification == "SUPPORT":
-                suggested_labels.extend(["SR-Support Request"])
-            elif classification == "INFO_NEEDED":
-                suggested_labels.extend(["Needs Author Feedback"])
-            elif classification == "BUG":
-                suggested_labels.extend(["bug", "triage"])
-            elif classification == "FEATURE":
-                suggested_labels.append("feature-request")        
+        if classification == "BUG":
+            # Clear product defects get bug + triage for internal investigation
+            suggested_labels.extend(["bug", "triage"])
+        elif classification == "SUPPORT":
+            # Customer-specific issues and how-to questions get support request
+            suggested_labels.extend(["SR-Support Request"])
+        elif classification == "INFO_NEEDED":
+            # Insufficient information gets author feedback (triggers 7-day stale process)
+            suggested_labels.extend(["Needs Author Feedback"])
+        elif classification == "FEATURE":
+            suggested_labels.append("feature-request")
+        elif classification == "DUPLICATE":
+            suggested_labels.append("duplicate")
+        
         # Determine response template
         template_key = {
             "SUPPORT": "support_request",
-            "BUG": "bug_acknowledged",
+            "BUG": "bug_acknowledged", 
             "INFO_NEEDED": "need_more_info",
-            "FEATURE": "bug_acknowledged",
+            "FEATURE": "feature_acknowledged",
             "DUPLICATE": "duplicate_issue"
         }.get(classification, "bug_acknowledged")
         
         suggested_response = self.config['templates'][template_key]
         
-        # Around line 155, update the return statement in _parse_classification_response:
-
         return ClassificationResult(
             classification=classification,
             confidence=response['confidence'],
@@ -202,13 +209,12 @@ Respond with JSON:
             suggested_labels=suggested_labels,
             suggested_response=suggested_response,
             suggested_assignees=suggested_assignees,
-            suggested_areas=[area],  # Make it a list
-            primary_area=area,       # Add primary_area
-            is_cri=False,           # Add is_cri
-            duplicate_of=None,      # Add duplicate_of
-            similar_issues=None     # Add similar_issues
+            suggested_areas=[area],
+            primary_area=area,
+            is_cri=False,
+            duplicate_of=None,
+            similar_issues=None
         )
-    
     def find_similar_issues(self, new_issue: Dict, existing_issues: List[Dict]) -> List[Dict]:
         """Find potentially duplicate issues"""
         similar_issues = []
