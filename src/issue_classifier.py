@@ -10,7 +10,7 @@ try:
     from .wiki_assistant import WikiAssistant
 except ImportError:
     WikiAssistant = None
-    
+
 @dataclass
 class ClassificationResult:
     classification: str
@@ -131,7 +131,7 @@ Respond with JSON:
             "classification": classification,
             "confidence": 0.85,
             "reasoning": "Classified based on keywords and content analysis",
-            "suggested_area": suggested_area,
+            "suggested_area": area,
             "missing_info": ["cluster version", "region"] if classification == "INFO_NEEDED" else []
         }
     
@@ -152,7 +152,7 @@ Respond with JSON:
         """Parse AI response and determine all actions"""
         
         classification = response['classification']
-        area = response['suggested_area']
+        area = response.get('suggested_area', 'other')  # Keep as fallback for API response
         
         # Determine assignees
         suggested_assignees = []
