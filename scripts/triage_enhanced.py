@@ -62,7 +62,7 @@ def main(issue_number):
         comment = f"🤖 **AI Issue Analysis**\n\n"
         comment += f"**Classification**: {result.classification}\n"
         comment += f"**Confidence**: {result.confidence:.2%}\n"
-        comment += f"**Area**: {result.suggested_area}\n"
+        comment += f"**Area**: {', '.join(result.suggested_areas) if result.suggested_areas else 'general'}\n"
 
         # Add wiki response if available
         if hasattr(result, 'wiki_response') and result.wiki_response and result.wiki_response.get('found_relevant_docs'):
