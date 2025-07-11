@@ -83,44 +83,70 @@ class IssueClassifier:
         return result
     
     def _create_classification_prompt(self, issue: Dict) -> str:
-        return f"""You are an AKS (Azure Kubernetes Service) issue classifier. Analyze the following issue and classify it according to AKS triage guidelines.
+        return f"""You are an AKS (Azure Kubernetes Service) issue classifier. Analyze the following issue and classify it according to official AKS triage guidelines.
 
     Issue Title: {issue['title']}
     Issue Body: {issue['body']}
 
-    Classification Guidelines:
+    OFFICIAL AKS LABELING GUIDELINES:
+
+    - **SR-Support Request**
+    - During triage, add to issues that are customer issues or need more information.
+
+    - **Needs Author Information**
+    - Add to issues where we are asking the customer for more information. Automatically added to any issues needing a support request.
+
+    - **Stale**
+    - Do not manually add this label. It is used by the bot and has different wait times depending on the type of issue.
+
+    - **Under Investigation**
+    - Add this label when the issue is actively undergoing investigation from the PG (engineer assigned). No further action from the customer is needed.
+
+    - **Needs Attention**
+    - Added by the bot to issues which have been inactive and require attention from the GitHub v-team.
+
+    - **resolution/fix-released**
+    - Add once the issue-related bug fix has been merged into a release.
+
+    - **resolution/sr-resolved**
+    - Add this label once the customer's support ticket has been resolved and closed.
+
+    CLASSIFICATION DECISION TREE:
     1. BUG - Product defects, reproducible errors, crashes, parsing issues, configuration problems
     → Gets: bug + triage labels (internal investigation)
+    → Examples: "YAML parsing error", "Pod crashes with OOMKilled", "Service mesh not working", "API server timeout"
     
-    2. SUPPORT - Customer-specific issues, how-to questions, configuration help, best practices
+    2. SUPPORT - Customer-specific issues, how-to questions, configuration help, best practices, guidance needed
     → Gets: SR-Support Request label (customer opens support ticket)
+    → Examples: "How to configure X", "Help with Y", "Best practices for Z", "Customer environment issue"
     
     3. INFO_NEEDED - Insufficient information, vague descriptions, missing critical details
-    → Gets: Needs Author Feedback label (7-day stale process)
+    → Gets: Needs Author Feedback label (triggers stale process)
+    → Examples: "Pod not starting" (no details), "Cluster broken" (no context), "Error occurred" (no error message)
     
     4. FEATURE - Feature requests, enhancements, new functionality
     → Gets: feature-request label
+    → Examples: "Add support for X", "Enhancement: Y", "New feature: Z"
     
     5. DUPLICATE - Similar to existing issue
     → Gets: duplicate label
 
-    Key Decision Points:
-    - YAML parsing errors, crashes, OOMKilled → BUG (product issue)
-    - "How to configure X", "Help with Y" → SUPPORT (customer needs guidance)
-    - "Pod not starting" with no details → INFO_NEEDED (insufficient info)
-    - "Add support for X" → FEATURE (enhancement)
+    CRITICAL DISTINCTIONS:
+    - Technical errors/crashes = BUG (needs engineering investigation)
+    - Customer questions/guidance = SUPPORT (needs support ticket)
+    - Vague reports = INFO_NEEDED (needs more details from customer)
 
-    Also identify the area from: {', '.join(self.config['keywords'].keys())}
+    Technical Area Classification from: {', '.join(self.config['keywords'].keys())}
 
     Respond with JSON:
     {{
     "classification": "BUG|SUPPORT|INFO_NEEDED|DUPLICATE|FEATURE",
     "confidence": 0.0-1.0,
-    "reasoning": "brief explanation",
+    "reasoning": "brief explanation of why this classification was chosen based on the guidelines above",
     "suggested_area": "area name",
     "missing_info": ["list of missing details if applicable"]
     }}"""
-    
+
     def _mock_classify(self, issue: Dict) -> Dict:
         """Mock classification for testing without API calls"""
         title_lower = issue['title'].lower()
