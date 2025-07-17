@@ -1,12 +1,12 @@
 {
   "engineers": {
-    "container-insights": ["ganga1980", "aritraghosh"],
-    "networking": ["@Azure/aks-pm"],
-    "storage": ["@Azure/aks-pm"],
-    "compute": ["@Azure/aks-pm"],
-    "cluster-upgrade": ["@Azure/aks-pm"],
-    "container-registry": ["@Azure/aks-pm"],
-    "security": ["@Azure/aks-pm"]
+    "container-insights": ["naman-msft"],
+    "networking": ["naman-msft"],
+    "storage": ["naman-msft"],
+    "compute": ["naman-msft"],
+    "cluster-upgrade": ["naman-msft"],
+    "container-registry": ["naman-msft"],
+    "security": ["naman-msft"]
   },
   "ai_mode": "apply",
   "confidence_threshold": 0.9,

@@ -211,75 +211,104 @@ class WikiAssistant:
 
     def search_and_answer(self, issue_title: str, issue_body: str) -> Dict:
         """Search wiki for relevant info and generate response"""
-        # Combine title and body into a query
-        query = f"{issue_title}\n\n{issue_body}"
         
-        # Create a thread
-        thread = self.client.beta.threads.create(
-            tool_resources={
-                "file_search": {
-                    "vector_store_ids": [self.vector_store_id]
-                }
-            }
-        )
-        
-        # Add the issue as a message
-        self.client.beta.threads.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content=f"""A user has created this GitHub issue. Please help them by:
-1. Searching the AKS documentation for relevant information
-2. Providing a helpful response with solutions
-3. If it's a known issue, explain the solution step by step
-4. If you can't find specific information, provide general troubleshooting guidance
+        # First, always generate an AI response based on the issue
+        ai_prompt = f"""
+    As an Azure Kubernetes Service (AKS) expert, provide helpful guidance for this issue:
 
-Issue Title: {issue_title}
-Issue Body: {issue_body}
+    Issue Title: {issue_title}
+    Issue Description: {issue_body}
 
-Please provide a comprehensive response with actionable steps.
-"""
-        )
+    Provide:
+    1. Root cause analysis - What's likely causing this issue
+    2. Immediate troubleshooting steps - What to check/try first
+    3. Potential solutions - Specific fixes with commands/configurations
+    4. Best practices - How to prevent this in the future
+
+    Be technical, specific, and include actual commands or configurations where relevant.
+    """
         
-        # Run the assistant
-        run = self.client.beta.threads.runs.create_and_poll(
-            thread_id=thread.id,
-            assistant_id=self.assistant_id,
-            instructions="""You are helping with an AKS GitHub issue. 
-            Search the AKS documentation thoroughly for relevant information.
-            Provide specific, actionable solutions when possible.
-            Be helpful, comprehensive, and technical when appropriate.
-            Format your response in clear GitHub-friendly markdown.
-            Include specific commands or configuration examples when relevant.""",
-            tools=[{"type": "file_search"}],
-            tool_choice={"type": "file_search"}
-        )
-        
-        if run.status == 'completed':
-            messages = self.client.beta.threads.messages.list(thread_id=thread.id)
+        base_response = ""
+        try:
+            # Generate AI response first
+            ai_response = self.client.chat.completions.create(
+                model=self.deployment_name,
+                messages=[
+                    {"role": "system", "content": "You are an Azure Kubernetes Service (AKS) expert. Provide detailed, technical troubleshooting guidance with specific commands and configurations."},
+                    {"role": "user", "content": ai_prompt}
+                ],
+                max_tokens=1500
+            )
             
-            for message in messages:
-                if message.role == "assistant":
-                    for content in message.content:
-                        if hasattr(content, 'text'):
-                            text_content = content.text.value
-                            annotations = getattr(content.text, 'annotations', [])
-                            
-                            # Process citations with validation
-                            final_content = self._process_citations(text_content, annotations)
-                            
-                            # Count valid citations
-                            valid_citations = len([ann for ann in annotations if hasattr(ann, 'file_citation')])
-                            
-                            return {
-                                "found_relevant_docs": valid_citations > 0,
-                                "response": final_content,
-                                "citations_count": valid_citations,
-                                "has_valid_links": "📚 Documentation References:" in final_content
-                            }
+            base_response = ai_response.choices[0].message.content
+            
+        except Exception as e:
+            print(f"Error generating AI response: {e}")
+            base_response = "I encountered an error generating a response. Please ensure your issue includes specific error messages and cluster configuration details."
+        
+        # Now try to enhance with wiki search
+        wiki_response = ""
+        found_docs = False
+        citations_count = 0
+        
+        try:
+            # Create a thread for wiki search
+            thread = self.client.beta.threads.create(
+                tool_resources={
+                    "file_search": {
+                        "vector_store_ids": [self.vector_store_id]
+                    }
+                }
+            )
+            
+            # Add the issue as a message
+            self.client.beta.threads.messages.create(
+                thread_id=thread.id,
+                role="user",
+                content=f"""Find relevant AKS documentation for this issue:
+    Title: {issue_title}
+    Body: {issue_body}
+
+    Search for documentation about error messages, configurations, or features mentioned."""
+            )
+            
+            # Run the assistant
+            run = self.client.beta.threads.runs.create_and_poll(
+                thread_id=thread.id,
+                assistant_id=self.assistant_id,
+                instructions="Search the AKS documentation for relevant information. Focus on finding specific documentation pages that address the issue.",
+                tools=[{"type": "file_search"}],
+                tool_choice={"type": "file_search"}
+            )
+            
+            if run.status == 'completed':
+                messages = self.client.beta.threads.messages.list(thread_id=thread.id)
+                
+                for message in messages:
+                    if message.role == "assistant":
+                        for content in message.content:
+                            if hasattr(content, 'text'):
+                                annotations = getattr(content.text, 'annotations', [])
+                                
+                                if annotations:
+                                    # Process citations
+                                    wiki_response = self._process_citations("", annotations)
+                                    citations_count = len([ann for ann in annotations if hasattr(ann, 'file_citation')])
+                                    found_docs = citations_count > 0
+                                break
+                        break
+                        
+        except Exception as e:
+            print(f"Wiki search error (non-critical): {e}")
+        
+        # Combine AI response with wiki citations
+        final_response = base_response
+        if wiki_response and "📚 Documentation References:" in wiki_response:
+            final_response = base_response + "\n" + wiki_response
         
         return {
-            "found_relevant_docs": False,
-            "response": "I couldn't search the documentation at this time. Please try again later.",
-            "citations_count": 0,
-            "has_valid_links": False
+            "found_relevant_docs": found_docs,
+            "response": final_response,
+            "citations_count": citations_count,
+            "has_valid_links": found_docs
         }
