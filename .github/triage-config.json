@@ -50,8 +50,7 @@
   },
   "wiki_assistant": {
     "enabled": true,
-    "validate_links": true,
-    "link_validation_timeout": 5,
+    "use_bing_grounding": true,
     "search_for_classifications": ["BUG", "SUPPORT", "INFO_NEEDED"],
     "max_response_length": 2000,
     "include_citations": true,

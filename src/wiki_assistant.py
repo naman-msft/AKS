@@ -1,314 +1,270 @@
 import os
 import json
-import requests
 from typing import Dict, List, Optional
-from openai import AzureOpenAI
-import re
-import urllib.parse
-from urllib.parse import quote
+from azure.ai.projects import AIProjectClient
+from azure.ai.agents.models import MessageRole, BingGroundingTool
+from azure.identity import DefaultAzureCredential
 
 class WikiAssistant:
     def __init__(self):
-        """Initialize with existing vector store and assistant"""
-        self.client = AzureOpenAI(
-            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-            api_version="2024-12-01-preview",
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+        """Initialize with Azure AI Projects and Bing Grounding"""
+        self.project_client = AIProjectClient(
+            endpoint=os.environ["PROJECT_ENDPOINT"],
+            credential=DefaultAzureCredential(),
         )
-        self.deployment_name = 'gpt-4.1'
+        self.model_deployment = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4.1")
+        self.bing_connection_id = os.getenv("AZURE_BING_CONNECTION_ID")
         
-        # Load existing vector store and assistant IDs
-        self.vector_store_id = self._load_resource_id("vector_store_id.json")
-        self.assistant_id = self._load_resource_id("assistant_id.json")
-        
-        # Load URL mapping
-        self.url_mapping = {}
-        if os.path.exists('wiki_url_mapping.json'):
-            try:
-                with open('wiki_url_mapping.json', 'r') as f:
-                    raw_mapping = json.load(f)
-                    
-                    # Clean URLs from markdown format
-                    for filename, url in raw_mapping.items():
-                        if url.startswith('[') and '](' in url and url.endswith(')'):
-                            # Extract URL from markdown format [text](url)
-                            start = url.find('](') + 2
-                            end = url.rfind(')')
-                            cleaned_url = url[start:end]
-                            self.url_mapping[filename] = cleaned_url
-                        else:
-                            self.url_mapping[filename] = url
-                    
-                    print(f"✓ Loaded and cleaned URL mapping for {len(self.url_mapping)} files")
-            except Exception as e:
-                print(f"✗ Error loading URL mapping: {e}")
+        if not self.bing_connection_id:
+            print("⚠️  AZURE_BING_CONNECTION_ID not configured - web search will be disabled")
         else:
-            print("⚠️  No URL mapping file found")
-        
-        if not self.vector_store_id or not self.assistant_id:
-            raise ValueError("Vector store and assistant must be set up first")
-    def _load_resource_id(self, filename: str) -> Optional[str]:
-        """Load resource ID from file"""
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                data = json.load(f)
-                return data.get(filename.replace('.json', ''))
-        return None
+            print(f"✅ Using Bing connection: {self.bing_connection_id}")
     
-    def _validate_wiki_url(self, url: str, timeout: int = 5) -> bool:
-        """Validate if a wiki URL is accessible"""
-        # For Azure DevOps wiki URLs, they require authentication
-        # HTTP 401 means the URL is valid but requires auth
-        # HTTP 404 means the URL structure might be wrong
-        if "dev.azure.com" in url and "_wiki/wikis" in url:
-            try:
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-                
-                response = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
-                
-                # For ADO wiki URLs:
-                # - 401 = Valid URL but requires authentication (GOOD)
-                # - 404 = Invalid URL structure (BAD)
-                # - 2xx/3xx = Public access (GOOD)
-                if response.status_code == 401:
-                    return True  # URL is valid, just needs auth
-                elif response.status_code == 404:
-                    return False  # URL structure is wrong
-                else:
-                    return response.status_code < 400
-                    
-            except Exception as e:
-                print(f"URL validation failed for {url}: {e}")
-                return False
-        
-        # For other URLs, use normal validation
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-            
-            response = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
-            return response.status_code < 400
-            
-        except Exception as e:
-            print(f"URL validation failed for {url}: {e}")
-            return False
-    
-    def _construct_wiki_url(self, file_name: str) -> str:
-        """Get wiki URL from mapping or construct fallback"""
-        # First check if we have the URL in our mapping (already cleaned)
-        if file_name in self.url_mapping:
-            return self.url_mapping[file_name]
-        
-        # If not found, try without .md extension
-        base_name = file_name.replace('.md', '')
-        for stored_name, url in self.url_mapping.items():
-            if stored_name.replace('.md', '') == base_name:
-                return url
-        
-        # Last resort: construct a basic URL
-        print(f"⚠️  Warning: No URL mapping found for {file_name}")
-        clean_name = file_name.replace('.md', '')
-        wiki_path = f"/AKS/{clean_name}"
-        encoded_path = urllib.parse.quote(wiki_path, safe='/')
-        
-        return f"https://dev.azure.com/msazure/CloudNativeCompute/_wiki/wikis/CloudNativeCompute.wiki/?pagePath={encoded_path}"
-    # def _process_citations(self, message_content: str, annotations: List) -> str:
-    #     """Process citations with link validation"""
-    #     if not annotations:
-    #         return message_content
-        
-    #     valid_citations = []
-    #     invalid_count = 0
-        
-    #     # Remove inline citation markers from the message
-    #     message_content = re.sub(r'【\d+:\d+†[^】]+】', '', message_content)
-        
-    #     for index, annotation in enumerate(annotations):
-    #         if hasattr(annotation, "file_citation"):
-    #             file_citation = annotation.file_citation
-                
-    #             try:
-    #                 cited_file = self.client.files.retrieve(file_citation.file_id)
-    #                 file_name = cited_file.filename
-    #                 display_name = file_name.replace('.md', '')
-                    
-    #                 # Try to get the URL from file content first, then construct
-    #                 wiki_url = self._construct_wiki_url(file_name)
-                    
-    #                 # Validate the URL
-    #                 if self._validate_wiki_url(wiki_url):
-    #                     valid_citations.append(f"[{len(valid_citations) + 1}] [{display_name}]({wiki_url})")
-    #                 else:
-    #                     invalid_count += 1
-    #                     print(f"Invalid wiki URL skipped: {wiki_url}")
-                        
-    #             except Exception as e:
-    #                 print(f"Error processing citation {index}: {e}")
-    #                 invalid_count += 1
-        
-    #     # Add valid citations to message
-    #     if valid_citations:
-    #         message_content += "\n\n### 📚 Documentation References:\n" + "\n".join(valid_citations)
-            
-    #         if invalid_count > 0:
-    #             message_content += f"\n\n*Note: {invalid_count} additional reference(s) were found but the links could not be validated.*"
-    #     elif invalid_count > 0:
-    #         message_content += f"\n\n*Note: {invalid_count} documentation reference(s) were found but could not be validated for accessibility.*"
-        
-    #     return message_content
-
-    def _process_citations(self, message_content: str, annotations: List) -> str:
-        """Process citations with link validation (internal links hidden for public repo)"""
-        if not annotations:
-            return message_content
-        
-        valid_citations = []
-        invalid_count = 0
-        
-        # Remove inline citation markers from the message
-        message_content = re.sub(r'【\d+:\d+†[^】]+】', '', message_content)
-        
-        for index, annotation in enumerate(annotations):
-            if hasattr(annotation, "file_citation"):
-                file_citation = annotation.file_citation
-                
-                try:
-                    cited_file = self.client.files.retrieve(file_citation.file_id)
-                    file_name = cited_file.filename
-                    display_name = file_name.replace('.md', '')
-                    
-                    # Get the URL from mapping (for internal functionality)
-                    wiki_url = self._construct_wiki_url(file_name)
-                    
-                    # Validate the URL (keeping validation logic)
-                    if self._validate_wiki_url(wiki_url):
-                        # For public repo: Show document names without internal links
-                        valid_citations.append(f"[{len(valid_citations) + 1}] {display_name}")
-                        
-                        # For internal use: Uncomment the line below to show full links
-                        # valid_citations.append(f"[{len(valid_citations) + 1}] [{display_name}]({wiki_url})")
-                    else:
-                        invalid_count += 1
-                        print(f"Invalid wiki URL skipped: {wiki_url}")
-                        
-                except Exception as e:
-                    print(f"Error processing citation {index}: {e}")
-                    invalid_count += 1
-        
-        # Add valid citations to message
-        if valid_citations:
-            message_content += "\n\n### 📚 Documentation References:\n" + "\n".join(valid_citations)
-            
-            if invalid_count > 0:
-                message_content += f"\n\n*Note: {invalid_count} additional reference(s) were found but could not be validated.*"
-        elif invalid_count > 0:
-            message_content += f"\n\n*Note: {invalid_count} documentation reference(s) were found but could not be validated for accessibility.*"
-        
-        return message_content
-
     def search_and_answer(self, issue_title: str, issue_body: str) -> Dict:
-        """Search wiki for relevant info and generate response"""
-        
-        # First, always generate an AI response based on the issue
-        ai_prompt = f"""
-    As an Azure Kubernetes Service (AKS) expert, provide helpful guidance for this issue:
-
-    Issue Title: {issue_title}
-    Issue Description: {issue_body}
-
-    Provide:
-    1. Root cause analysis - What's likely causing this issue
-    2. Immediate troubleshooting steps - What to check/try first
-    3. Potential solutions - Specific fixes with commands/configurations
-    4. Best practices - How to prevent this in the future
-
-    Be technical, specific, and include actual commands or configurations where relevant.
-    """
-        
-        base_response = ""
+        """Search using Bing Grounding and generate answer with Azure AI Projects"""
         try:
-            # Generate AI response first
-            ai_response = self.client.chat.completions.create(
-                model=self.deployment_name,
-                messages=[
-                    {"role": "system", "content": "You are an Azure Kubernetes Service (AKS) expert. Provide detailed, technical troubleshooting guidance with specific commands and configurations."},
-                    {"role": "user", "content": ai_prompt}
-                ],
-                max_tokens=1500
-            )
-            
-            base_response = ai_response.choices[0].message.content
-            
-        except Exception as e:
-            print(f"Error generating AI response: {e}")
-            base_response = "I encountered an error generating a response. Please ensure your issue includes specific error messages and cluster configuration details."
-        
-        # Now try to enhance with wiki search
-        wiki_response = ""
-        found_docs = False
-        citations_count = 0
-        
-        try:
-            # Create a thread for wiki search
-            thread = self.client.beta.threads.create(
-                tool_resources={
-                    "file_search": {
-                        "vector_store_ids": [self.vector_store_id]
-                    }
-                }
-            )
-            
-            # Add the issue as a message
-            self.client.beta.threads.messages.create(
-                thread_id=thread.id,
-                role="user",
-                content=f"""Find relevant AKS documentation for this issue:
-    Title: {issue_title}
-    Body: {issue_body}
+            # Create instructions for the AKS assistant
+            instructions = """You are an expert Azure Kubernetes Service (AKS) support assistant. 
 
-    Search for documentation about error messages, configurations, or features mentioned."""
-            )
-            
-            # Run the assistant
-            run = self.client.beta.threads.runs.create_and_poll(
-                thread_id=thread.id,
-                assistant_id=self.assistant_id,
-                instructions="Search the AKS documentation for relevant information. Focus on finding specific documentation pages that address the issue.",
-                tools=[{"type": "file_search"}],
-                tool_choice={"type": "file_search"}
-            )
-            
-            if run.status == 'completed':
-                messages = self.client.beta.threads.messages.list(thread_id=thread.id)
+When helping with AKS issues:
+1. Search the web for current, relevant information about the specific problem
+2. Provide concise, actionable solutions with specific commands/configurations
+3. Include relevant links and citations from your search results
+4. Focus on recent documentation and known solutions
+5. Format your response in markdown for readability
+
+If you cannot find specific information, provide general AKS troubleshooting guidance based on your knowledge."""
+
+            with self.project_client:
+                agents_client = self.project_client.agents
                 
-                for message in messages:
-                    if message.role == "assistant":
-                        for content in message.content:
-                            if hasattr(content, 'text'):
-                                annotations = getattr(content.text, 'annotations', [])
-                                
-                                if annotations:
-                                    # Process citations
-                                    wiki_response = self._process_citations("", annotations)
-                                    citations_count = len([ann for ann in annotations if hasattr(ann, 'file_citation')])
-                                    found_docs = citations_count > 0
-                                break
-                        break
-                        
+                # Create agent with or without Bing grounding
+                if self.bing_connection_id:
+                    # Initialize Bing grounding tool - exactly like the working script
+                    bing = BingGroundingTool(connection_id=self.bing_connection_id)
+                    
+                    agent = agents_client.create_agent(
+                        model=self.model_deployment,
+                        name="aks-assistant",
+                        instructions=instructions,
+                        tools=bing.definitions,
+                    )
+                    print("🔍 Created agent WITH Bing grounding")
+                else:
+                    agent = agents_client.create_agent(
+                        model=self.model_deployment,
+                        name="aks-assistant",
+                        instructions=instructions
+                    )
+                    print("⚠️  Created agent WITHOUT Bing grounding")
+                
+                # Create thread for communication
+                thread = agents_client.threads.create()
+                
+                # Create user message with the issue
+                user_query = f"""Help me with this AKS issue:
+
+**Issue Title:** {issue_title}
+
+**Issue Description:** {issue_body}
+
+Please search for current information and provide a comprehensive solution."""
+
+                message = agents_client.messages.create(
+                    thread_id=thread.id,
+                    role=MessageRole.USER,
+                    content=user_query,
+                )
+                
+                # Create and process agent run
+                run = agents_client.runs.create_and_process(
+                    thread_id=thread.id, 
+                    agent_id=agent.id
+                )
+                
+                print(f"Run finished with status: {run.status}")
+                
+                # Check if run was successful
+                if run.status == "failed":
+                    print(f"Run failed: {run.last_error}")
+                    # Don't return fallback here, continue with the client open
+                
+                # Check run steps to see if Bing was used - FIXED: iterate directly, no len()
+                used_bing_search = False
+                run_steps = agents_client.run_steps.list(thread_id=thread.id, run_id=run.id)
+                
+                step_count = 0
+                for step in run_steps:
+                    step_count += 1
+                    print(f"Step {step.get('id')} status: {step.get('status')}")
+                    step_details = step.get("step_details", {})
+                    tool_calls = step_details.get("tool_calls", [])
+                    
+                    if tool_calls:
+                        print("  Tool calls:")
+                        for call in tool_calls:
+                            print(f"    Tool Call ID: {call.get('id')}")
+                            print(f"    Type: {call.get('type')}")
+                            
+                            if call.get('type') == 'bing_grounding':
+                                used_bing_search = True
+                                bing_details = call.get("bing_grounding", {})
+                                if bing_details:
+                                    print(f"    Bing Grounding ID: {bing_details.get('requesturl')}")
+                    print()  # Extra newline like the working script
+                
+                print(f"Found {step_count} run steps total")
+                
+                # Get the agent's response
+                response_message = agents_client.messages.get_last_message_by_role(
+                    thread_id=thread.id, 
+                    role=MessageRole.AGENT
+                )
+                
+                # Extract response text
+                response_text = ""
+                citations = []
+                
+                if response_message:
+                    for text_message in response_message.text_messages:
+                        response_text += text_message.text.value
+                    
+                    # Extract URL citations
+                    for annotation in response_message.url_citation_annotations:
+                        citations.append({
+                            'title': annotation.url_citation.title,
+                            'url': annotation.url_citation.url
+                        })
+                        print(f"Found citation: {annotation.url_citation.title}")
+                
+                # Clean up
+                agents_client.delete_agent(agent.id)
+                print("Deleted agent")
+                
+                return {
+                    'found_relevant_docs': used_bing_search,
+                    'response': response_text,
+                    'citations_count': len(citations),
+                    'search_results': citations,
+                    'used_bing_grounding': used_bing_search
+                }
+                
         except Exception as e:
-            print(f"Wiki search error (non-critical): {e}")
-        
-        # Combine AI response with wiki citations
-        final_response = base_response
-        if wiki_response and "📚 Documentation References:" in wiki_response:
-            final_response = base_response + "\n" + wiki_response
-        
-        return {
-            "found_relevant_docs": found_docs,
-            "response": final_response,
-            "citations_count": citations_count,
-            "has_valid_links": found_docs
-        }
+            print(f"Azure AI Projects search failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Generate fallback with a fresh client since the with block may be closed
+            return self._generate_fallback_response_fresh(issue_title, issue_body)
+    
+    def _generate_fallback_response_fresh(self, title: str, body: str) -> Dict:
+        """Generate fallback response with a fresh client connection"""
+        try:
+            # Create a fresh client for fallback
+            fresh_client = AIProjectClient(
+                endpoint=os.environ["PROJECT_ENDPOINT"],
+                credential=DefaultAzureCredential(),
+            )
+            
+            instructions = """You are an Azure Kubernetes Service (AKS) expert. Provide detailed, technical troubleshooting guidance based on your knowledge."""
+            
+            with fresh_client:
+                agents_client = fresh_client.agents
+                
+                # Create basic agent without tools
+                agent = agents_client.create_agent(
+                    model=self.model_deployment,
+                    name="aks-fallback-assistant",
+                    instructions=instructions
+                )
+                
+                # Create thread and message
+                thread = agents_client.threads.create()
+                
+                fallback_query = f"""As an Azure Kubernetes Service (AKS) expert, provide helpful guidance for this issue:
+
+Issue Title: {title}
+Issue Description: {body}
+
+Provide:
+1. Root cause analysis - What's likely causing this issue
+2. Immediate troubleshooting steps - What to check/try first  
+3. Potential solutions - Specific fixes with commands/configurations
+4. Best practices - How to prevent this in the future
+
+Be technical, specific, and include actual commands or configurations where relevant."""
+
+                message = agents_client.messages.create(
+                    thread_id=thread.id,
+                    role=MessageRole.USER,
+                    content=fallback_query,
+                )
+                
+                # Process the run
+                run = agents_client.runs.create_and_process(
+                    thread_id=thread.id, 
+                    agent_id=agent.id
+                )
+                
+                # Get response
+                response_message = agents_client.messages.get_last_message_by_role(
+                    thread_id=thread.id, 
+                    role=MessageRole.AGENT
+                )
+                
+                response_text = ""
+                if response_message:
+                    for text_message in response_message.text_messages:
+                        response_text += text_message.text.value
+                
+                # Clean up
+                agents_client.delete_agent(agent.id)
+                
+                return {
+                    'found_relevant_docs': False,
+                    'response': response_text,
+                    'citations_count': 0,
+                    'used_bing_grounding': False
+                }
+                
+        except Exception as e:
+            print(f"Error generating fallback response: {e}")
+            return {
+                'found_relevant_docs': False,
+                'response': "I encountered an error generating a response. Please ensure your issue includes specific error messages and cluster configuration details.",
+                'citations_count': 0,
+                'used_bing_grounding': False
+            }
+    
+    def _generate_fallback_response(self, title: str, body: str) -> Dict:
+        """Legacy fallback method - kept for compatibility"""
+        return self._generate_fallback_response_fresh(title, body)
+    
+    def close(self):
+        """Close the project client"""
+        if hasattr(self.project_client, 'close'):
+            self.project_client.close()
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Search AKS docs with Bing Grounding via Azure AI Projects"
+    )
+    parser.add_argument("-t", "--title", required=True, help="Issue title")
+    parser.add_argument("-b", "--body",  required=True, help="Issue description")
+    args = parser.parse_args()
+
+    assistant = WikiAssistant()
+    result = assistant.search_and_answer(args.title, args.body)
+    print("\n=== Answer ===\n")
+    print(result["response"])
+    
+    if result.get("used_bing_grounding"):
+        print(f"\n✅ Used Bing web search with {result['citations_count']} citations")
+    else:
+        print("\n⚠️  Fallback mode - no web search used")
+    
+    if result.get("search_results"):
+        print("\n=== Sources ===")
+        for i, citation in enumerate(result["search_results"], 1):
+            print(f"{i}. [{citation['title']}]({citation['url']})")

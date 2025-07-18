@@ -23,7 +23,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        pip install PyGithub openai python-dotenv azure-identity requests
+        pip install PyGithub openai python-dotenv azure-identity requests azure-ai-projects azure-ai-agents
 
     - name: Check if should triage
       id: check_labels
@@ -35,25 +35,25 @@ jobs:
         else
           echo "skip=false" >> $GITHUB_OUTPUT
         fi
-    
-    - name: Create Wiki Assistant Resources
-      run: |
-        # Create vector store and assistant ID files from secrets
-        echo '{"vector_store_id": "${{ secrets.VECTOR_STORE_CONFIG }}"}' > vector_store_id.json
-        echo '{"assistant_id": "${{ secrets.ASSISTANT_CONFIG }}"}' > assistant_id.json
-        # Wiki URL mapping is now in the repo
-        ls -la wiki_url_mapping.json
-        echo "Wiki mapping has $(wc -l < wiki_url_mapping.json) entries"
 
-    - name: Triage Issue
+    - name: Triage Issue with Bing Search
       if: steps.check_labels.outputs.skip == 'false'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Legacy Azure OpenAI for classification
         AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
         AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
         AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+        # New Azure AI Projects for Bing Search
+        PROJECT_ENDPOINT: ${{ secrets.PROJECT_ENDPOINT }}
+        MODEL_DEPLOYMENT_NAME: ${{ secrets.MODEL_DEPLOYMENT_NAME }}
+        AZURE_BING_CONNECTION_ID: ${{ secrets.AZURE_BING_CONNECTION_ID }}
         USE_MOCK_API: ${{ secrets.USE_MOCK_API || 'false' }}
       run: |
+        echo "🔍 Starting AI triage with Bing search capabilities..."
+        echo "Project endpoint: $PROJECT_ENDPOINT"
+        echo "Model deployment: $MODEL_DEPLOYMENT_NAME"
+        echo "Bing connection: $AZURE_BING_CONNECTION_ID"
         python scripts/triage_enhanced.py ${{ github.event.issue.number }}
         
     - name: Process Comment Commands
