@@ -70,7 +70,7 @@ def main():
     else:
         print("🚀 Running with Azure OpenAI")
         azure_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
-        azure_key = os.getenv('AZURE_OPENAI_KEY')
+        azure_key = os.getenv('AZURE_OPENAI_API_KEY')
         deployment_name = os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
         
         if not all([azure_endpoint, azure_key, deployment_name]):

@@ -51,7 +51,7 @@ def test_issue_classification(issue_title, issue_body):
         classifier = IssueClassifier(
             config_path=".github/triage-config.json",
             azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
-            azure_key=os.getenv('AZURE_OPENAI_KEY'),
+            azure_key=os.getenv('AZURE_OPENAI_API_KEY'),
             deployment_name=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME', 'gpt-4')
         )
         
@@ -111,7 +111,7 @@ def main():
     print("=== AKS Issue Triage Wiki Integration Test ===\n")
     
     # Check environment
-    required_vars = ['AZURE_OPENAI_ENDPOINT', 'AZURE_OPENAI_KEY']
+    required_vars = ['AZURE_OPENAI_ENDPOINT', 'AZURE_OPENAI_API_KEY']
     missing = [var for var in required_vars if not os.getenv(var)]
     if missing:
         print(f"✗ Missing environment variables: {', '.join(missing)}")

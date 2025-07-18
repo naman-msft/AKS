@@ -15,7 +15,7 @@ class WikiAssistant:
             api_version="2024-12-01-preview",
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
         )
-        self.deployment_name = 'gpt-4'
+        self.deployment_name = 'gpt-4.1'
         
         # Load existing vector store and assistant IDs
         self.vector_store_id = self._load_resource_id("vector_store_id.json")

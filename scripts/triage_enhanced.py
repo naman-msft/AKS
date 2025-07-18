@@ -29,7 +29,7 @@ def main(issue_number):
     classifier = IssueClassifier(
         config_path=".github/triage-config.json",
         azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
-        azure_key=os.getenv('AZURE_OPENAI_KEY'),
+        azure_key=os.getenv('AZURE_OPENAI_API_KEY'),
         deployment_name=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
     )
 
@@ -57,6 +57,20 @@ def main(issue_number):
         # Apply labels
         issue.add_to_labels(*result.suggested_labels)
         print(f"✓ Applied labels: {', '.join(result.suggested_labels)}")
+        
+        # Show AI-detected area labels that will trigger assignments
+        area_labels = [label for label in result.suggested_labels if 
+                      label.startswith('addon/') or label.startswith('azure/') or 
+                      label.startswith('extension/') or label.startswith('upstream/') or 
+                      label.startswith('client/') or 
+                      label in ['Security', 'networking', 'storage', 'windows', 'upgrade', 'docs', 
+                               'fleet', 'keda', 'nodepools', 'resiliency', 'Scale and Performance', 
+                               'Cilium', 'mesh', 'service-mesh', 'AzGov', 'AzChina', 
+                               'app-gateway-for-containers', 'advanced-container-networking-services', 
+                               'pod-identity', 'control-plane']]
+        
+        if area_labels:
+            print(f"🎯 AI-detected area labels (will trigger auto-assignment): {', '.join(area_labels)}")
         
         # Post classification comment with wiki integration
         comment = f"🤖 **AI Issue Analysis**\n\n"

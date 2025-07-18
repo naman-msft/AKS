@@ -34,13 +34,14 @@ class IssueClassifier:
         self.deployment_name = deployment_name
         
         # Initialize Azure OpenAI client only if not in mock mode
-        if azure_key != "mock-api-key":
+        if azure_key != "mock-api-key" and azure_key:
             self.client = AzureOpenAI(
                 azure_endpoint=azure_endpoint,
                 api_key=azure_key,
                 api_version="2024-12-01-preview"
             )
-        
+        else:
+            self.client = None
         with open(config_path, 'r') as f:
             self.config = json.load(f)
         
@@ -68,8 +69,10 @@ class IssueClassifier:
         # Parse response and determine actions
         result = self._parse_classification_response(response, issue)
         
+        # Only do wiki search if NOT in mock mode and wiki is enabled
         wiki_response = None
-        if self.wiki_enabled and result.classification in ['BUG', 'SUPPORT', 'INFO_NEEDED']:
+        if (not (os.getenv('USE_MOCK_API', 'false').lower() == 'true' or self.azure_key == "mock-api-key") and 
+            self.wiki_enabled and result.classification in ['BUG', 'SUPPORT', 'INFO_NEEDED']):
             try:
                 wiki_response = self.wiki_assistant.search_and_answer(
                     issue['title'], 
@@ -81,77 +84,94 @@ class IssueClassifier:
         # Add wiki response to result
         result.wiki_response = wiki_response
         return result
-    
+
     def _create_classification_prompt(self, issue: Dict) -> str:
         return f"""You are an AKS (Azure Kubernetes Service) issue classifier. Analyze the following issue and classify it according to official AKS triage guidelines.
 
     Issue Title: {issue['title']}
     Issue Body: {issue['body']}
 
-    OFFICIAL AKS LABELING GUIDELINES:
+    PART 1: CLASSIFICATION
+    Classify into one of these categories:
+    - **BUG**: Product defects, reproducible errors, crashes, parsing issues, configuration problems
+    - **SUPPORT**: Customer-specific issues, how-to questions, configuration help, best practices, guidance needed
+    - **INFO_NEEDED**: Insufficient information, vague descriptions, missing critical details
+    - **FEATURE**: Feature requests, enhancements, new functionality
+    - **DUPLICATE**: Similar to existing issue
 
-    - **SR-Support Request**
-    - During triage, add to issues that are customer issues or need more information.
+    PART 2: AREA DETECTION
+    Additionally, analyze the issue content to determine which AKS area(s) this relates to. You can assign multiple areas if relevant:
 
-    - **Needs Author Information**
-    - Add to issues where we are asking the customer for more information. Automatically added to any issues needing a support request.
+    **Container Insights & Monitoring**:
+    - `addon/container-insights`: Container insights monitoring, Prometheus metrics, Grafana dashboards, log collection
+    - `addon/ama-metrics`: Azure Monitor managed Prometheus service, metrics collection
+    - `azure/oms`: Operations Management Suite, legacy monitoring
+    - `azure/log-analytics`: Log Analytics workspace integration, log queries, Kusto
 
-    - **Stale**
-    - Do not manually add this label. It is used by the bot and has different wait times depending on the type of issue.
+    **Addons & Extensions**:
+    - `addon/policy`: Azure Policy for AKS, OPA Gatekeeper, policy constraints
+    - `addon/virtual-nodes`: Virtual nodes, Azure Container Instances integration, serverless containers
+    - `addon/app-routing`: App routing addon, managed NGINX ingress controller
+    - `addon/agic`: Application Gateway Ingress Controller
+    - `extension/flux`: Flux GitOps extension, continuous deployment
 
-    - **Under Investigation**
-    - Add this label when the issue is actively undergoing investigation from the PG (engineer assigned). No further action from the customer is needed.
+    **Networking**:
+    - `networking`: General networking, CNI, DNS, load balancers, services, ingress
+    - `Cilium`: Cilium CNI, eBPF networking, network policies
+    - `advanced-container-networking-services`: ACNS, advanced networking features
+    - `service-mesh`: Service mesh implementations (Istio, Linkerd)
+    - `mesh`: General mesh networking
+    - `app-gateway-for-containers`: Application Gateway for Containers (AGC)
+    - `azure/application-gateway`: Azure Application Gateway integration
 
-    - **Needs Attention**
-    - Added by the bot to issues which have been inactive and require attention from the GitHub v-team.
+    **Security & Identity**:
+    - `Security`: RBAC, authentication, authorization, pod security policies
+    - `azure/security-center`: Microsoft Defender for Containers, security recommendations
+    - `pod-identity`: AAD Pod Identity, Workload Identity, managed identity
+    - `azure/confidentialCompute`: Confidential computing, secure enclaves, SGX
 
-    - **resolution/fix-released**
-    - Add once the issue-related bug fix has been merged into a release.
+    **Storage & Compute**:
+    - `storage`: Persistent volumes, CSI drivers, Azure Disk, Azure Files, storage classes
+    - `windows`: Windows containers, Windows node pools, Windows Server
+    - `nodepools`: Node pool management, node scaling, system/user pools
+    - `control-plane`: API server, etcd, scheduler, controller manager
+    - `Scale and Performance`: Cluster scaling, performance optimization, autoscaling
 
-    - **resolution/sr-resolved**
-    - Add this label once the customer's support ticket has been resolved and closed.
+    **Cloud Integration**:
+    - `azure/portal`: Azure Portal AKS experience, UI issues
+    - `client/portal`: Portal client-side issues
+    - `azure/acr`: Azure Container Registry integration, image management
+    - `AzGov`: Azure Government cloud specific issues
+    - `AzChina`: Azure China cloud specific issues
 
-    CLASSIFICATION DECISION TREE:
-    1. BUG - Product defects, reproducible errors, crashes, parsing issues, configuration problems
-    → Gets: bug + triage labels (internal investigation)
-    → Examples: "YAML parsing error", "Pod crashes with OOMKilled", "Service mesh not working", "API server timeout"
-    
-    2. SUPPORT - Customer-specific issues, how-to questions, configuration help, best practices, guidance needed
-    → Gets: SR-Support Request label (customer opens support ticket)
-    → Examples: "How to configure X", "Help with Y", "Best practices for Z", "Customer environment issue"
-    
-    3. INFO_NEEDED - Insufficient information, vague descriptions, missing critical details
-    → Gets: Needs Author Feedback label (triggers stale process)
-    → Examples: "Pod not starting" (no details), "Cluster broken" (no context), "Error occurred" (no error message)
-    
-    4. FEATURE - Feature requests, enhancements, new functionality
-    → Gets: feature-request label
-    → Examples: "Add support for X", "Enhancement: Y", "New feature: Z"
-    
-    5. DUPLICATE - Similar to existing issue
-    → Gets: duplicate label
-
-    CRITICAL DISTINCTIONS:
-    - Technical errors/crashes = BUG (needs engineering investigation)
-    - Customer questions/guidance = SUPPORT (needs support ticket)
-    - Vague reports = INFO_NEEDED (needs more details from customer)
-
-    Technical Area Classification from: {', '.join(self.config['keywords'].keys())}
+    **Specialized Services**:
+    - `ai/copilot`: AI and Copilot integration
+    - `fleet`: Azure Kubernetes Fleet Manager, multi-cluster management
+    - `keda`: KEDA event-driven autoscaling
+    - `upgrade`: Cluster and node upgrades, version management
+    - `docs`: Documentation issues and requests
+    - `resiliency`: Cluster reliability, fault tolerance, disaster recovery
+    - `upstream/helm`: Helm package manager, chart deployments
+    - `upstream/gatekeeper`: OPA Gatekeeper admission controller
 
     Respond with JSON:
     {{
-    "classification": "BUG|SUPPORT|INFO_NEEDED|DUPLICATE|FEATURE",
-    "confidence": 0.0-1.0,
-    "reasoning": "brief explanation of why this classification was chosen based on the guidelines above",
-    "suggested_area": "area name",
-    "missing_info": ["list of missing details if applicable"]
-    }}"""
+        "classification": "BUG|SUPPORT|INFO_NEEDED|DUPLICATE|FEATURE",
+        "confidence": 0.0-1.0,
+        "reasoning": "brief explanation of classification",
+        "area_labels": ["list of 0-3 most relevant area labels from above"],
+        "area_reasoning": "brief explanation of why these areas were selected",
+        "missing_info": ["list of missing details if INFO_NEEDED"]
+    }}
+
+    IMPORTANT: Only select area labels that are clearly relevant to the issue. Don't guess - if unsure, leave area_labels empty."""
 
     def _mock_classify(self, issue: Dict) -> Dict:
         """Mock classification for testing without API calls"""
         title_lower = issue['title'].lower()
         body_lower = issue['body'].lower()
         
+        # Determine classification
         if 'feature' in title_lower or 'add support' in title_lower:
             classification = "FEATURE"
         elif len(issue['body']) < 50:
@@ -161,21 +181,66 @@ class IssueClassifier:
         else:
             classification = "SUPPORT"
         
-        # Determine area based on keywords
-        suggested_area = "other"
-        for area, keywords in self.config['keywords'].items():
-            if any(keyword in title_lower or keyword in body_lower for keyword in keywords):
-                suggested_area = area
-                break
+        # AI-POWERED AREA DETECTION (mock logic)
+        area_labels = []
+        text = f"{title_lower} {body_lower}"
+        
+        # Container Insights
+        if any(keyword in text for keyword in ['container insights', 'prometheus', 'grafana', 'metrics', 'monitoring']):
+            area_labels.append('addon/container-insights')
+        
+        # Azure Monitor
+        if any(keyword in text for keyword in ['ama-metrics', 'azure monitor', 'managed prometheus']):
+            area_labels.append('addon/ama-metrics')
+        
+        # Windows
+        if any(keyword in text for keyword in ['windows', 'windows container', 'windows node', 'windows server']):
+            area_labels.append('windows')
+        
+        # Storage
+        if any(keyword in text for keyword in ['storage', 'pvc', 'persistent volume', 'disk', 'mount', 'csi']):
+            area_labels.append('storage')
+        
+        # Networking
+        if any(keyword in text for keyword in ['network', 'dns', 'load balancer', 'ingress', 'service']):
+            area_labels.append('networking')
+        
+        # Cilium
+        if any(keyword in text for keyword in ['cilium', 'ebpf']):
+            area_labels.append('Cilium')
+        
+        # App Routing
+        if any(keyword in text for keyword in ['app routing', 'nginx', 'ingress controller']):
+            area_labels.append('addon/app-routing')
+        
+        # Security
+        if any(keyword in text for keyword in ['rbac', 'security', 'authentication', 'authorization']):
+            area_labels.append('Security')
+        
+        # Upgrades
+        if any(keyword in text for keyword in ['upgrade', 'version', 'kubernetes version']):
+            area_labels.append('upgrade')
+        
+        # Portal
+        if any(keyword in text for keyword in ['portal', 'azure portal', 'ui']):
+            area_labels.append('azure/portal')
+        
+        # ACR
+        if any(keyword in text for keyword in ['acr', 'container registry', 'image pull']):
+            area_labels.append('azure/acr')
+        
+        # Limit to top 3 most relevant
+        area_labels = area_labels[:3]
         
         return {
             "classification": classification,
             "confidence": 0.85,
-            "reasoning": "Classified based on keywords and content analysis",
-            "suggested_area": area,
+            "reasoning": f"Classified as {classification} based on content analysis",
+            "area_labels": area_labels,
+            "area_reasoning": f"Detected areas based on keywords: {', '.join(area_labels)}" if area_labels else "No specific areas detected",
             "missing_info": ["cluster version", "region"] if classification == "INFO_NEEDED" else []
         }
-    
+
     def _call_azure_openai(self, prompt: str) -> Dict:
         """Call Azure OpenAI API for classification"""
         response = self.client.chat.completions.create(
@@ -188,6 +253,8 @@ class IssueClassifier:
         
         return json.loads(response.choices[0].message.content)
     
+    # Update the _parse_classification_response method around line 197
+
     def _parse_classification_response(self, response: Dict, issue: Dict) -> ClassificationResult:
         """Parse AI response and determine all actions based on official AKS bot behavior"""
         
@@ -203,18 +270,23 @@ class IssueClassifier:
         suggested_labels = []
         
         if classification == "BUG":
-            # Clear product defects get bug + triage for internal investigation
             suggested_labels.extend(["bug", "triage"])
         elif classification == "SUPPORT":
-            # Customer-specific issues and how-to questions get support request
             suggested_labels.extend(["SR-Support Request"])
         elif classification == "INFO_NEEDED":
-            # Insufficient information gets author feedback (triggers 7-day stale process)
             suggested_labels.extend(["Needs Author Feedback"])
         elif classification == "FEATURE":
             suggested_labels.append("feature-request")
         elif classification == "DUPLICATE":
             suggested_labels.append("duplicate")
+        
+        # AI-POWERED AREA LABELS: Add area labels detected by AI
+        ai_area_labels = response.get('area_labels', [])
+        if ai_area_labels:
+            suggested_labels.extend(ai_area_labels)
+            print(f"🤖 AI detected area labels: {ai_area_labels}")
+            if 'area_reasoning' in response:
+                print(f"🧠 AI reasoning: {response['area_reasoning']}")
         
         # Determine response template
         template_key = {
@@ -239,7 +311,8 @@ class IssueClassifier:
             is_cri=False,
             duplicate_of=None,
             similar_issues=None
-        )
+        )  
+
     def find_similar_issues(self, new_issue: Dict, existing_issues: List[Dict]) -> List[Dict]:
         """Find potentially duplicate issues"""
         similar_issues = []

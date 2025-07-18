@@ -24,7 +24,7 @@ def main(issue_number):
     classifier = IssueClassifier(
         config_path=".github/triage-config.json",
         azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT'),
-        azure_key=os.getenv('AZURE_OPENAI_KEY'),
+        azure_key=os.getenv('AZURE_OPENAI_API_KEY'),
         deployment_name=os.getenv('AZURE_OPENAI_DEPLOYMENT_NAME')
     )
     
