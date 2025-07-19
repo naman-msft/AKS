@@ -7,61 +7,71 @@ on:
     types: [created]
   workflow_dispatch:
 
+permissions:
+  id-token: write       # allow OIDC federation
+  contents: read        # for checkout
+
 jobs:
   triage:
     runs-on: ubuntu-latest
-    # Don't run on issues created by bots
     if: github.event.issue.user.type != 'Bot'
-    
+
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-    
-    - name: Install dependencies
-      run: |
-        pip install PyGithub openai python-dotenv azure-identity requests azure-ai-projects azure-ai-agents
+      - uses: actions/checkout@v3
 
-    - name: Check if should triage
-      id: check_labels
-      run: |
-        # Check if issue already has classification labels
-        LABELS="${{ join(github.event.issue.labels.*.name, ',') }}"
-        if [[ "$LABELS" == *"bug"* ]] || [[ "$LABELS" == *"feature-request"* ]] || [[ "$LABELS" == *"SR-Support Request"* ]]; then
-          echo "skip=true" >> $GITHUB_OUTPUT
-        else
-          echo "skip=false" >> $GITHUB_OUTPUT
-        fi
+      - name: Azure Login (OIDC)
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.SUBSCRIPTION_ID }}
 
-    - name: Triage Issue with Bing Search
-      if: steps.check_labels.outputs.skip == 'false'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Legacy Azure OpenAI for classification
-        AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
-        AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
-        AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-        # New Azure AI Projects for Bing Search
-        PROJECT_ENDPOINT: ${{ secrets.PROJECT_ENDPOINT }}
-        MODEL_DEPLOYMENT_NAME: ${{ secrets.MODEL_DEPLOYMENT_NAME }}
-        AZURE_BING_CONNECTION_ID: ${{ secrets.AZURE_BING_CONNECTION_ID }}
-        USE_MOCK_API: ${{ secrets.USE_MOCK_API || 'false' }}
-      run: |
-        echo "🔍 Starting AI triage with Bing search capabilities..."
-        echo "Project endpoint: $PROJECT_ENDPOINT"
-        echo "Model deployment: $MODEL_DEPLOYMENT_NAME"
-        echo "Bing connection: $AZURE_BING_CONNECTION_ID"
-        python scripts/triage_enhanced.py ${{ github.event.issue.number }}
-        
-    - name: Process Comment Commands
-      if: github.event_name == 'issue_comment'
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Check if comment contains commands
-        if echo "${{ github.event.comment.body }}" | grep -E "^/(override-classification|assign|mark-as-cri|create-repair-item|mark-duplicate|request-info)"; then
-          python scripts/comment_commands.py ${{ github.event.issue.number }} ${{ github.event.comment.id }}
-        fi
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install PyGithub openai python-dotenv \
+                      azure-identity requests \
+                      azure-ai-projects azure-ai-agents
+
+      - name: Check if should triage
+        id: check_labels
+        run: |
+          LABELS="${{ join(github.event.issue.labels.*.name, ',') }}"
+          if [[ "$LABELS" == *"bug"* ]] || [[ "$LABELS" == *"feature-request"* ]] || [[ "$LABELS" == *"SR-Support Request"* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Triage Issue with Bing Search
+        if: steps.check_labels.outputs.skip == 'false'
+        env:
+          GITHUB_TOKEN:            ${{ secrets.GITHUB_TOKEN }}
+          # Legacy Azure OpenAI for classification
+          AZURE_OPENAI_ENDPOINT:   ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY:    ${{ secrets.AZURE_OPENAI_KEY }}
+          AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+          # Azure AI Projects (uses OIDC via DefaultAzureCredential)
+          PROJECT_ENDPOINT:        ${{ secrets.PROJECT_ENDPOINT }}
+          MODEL_DEPLOYMENT_NAME:   ${{ secrets.MODEL_DEPLOYMENT_NAME }}
+          AZURE_BING_CONNECTION_ID: ${{ secrets.AZURE_BING_CONNECTION_ID }}
+          USE_MOCK_API:            ${{ secrets.USE_MOCK_API || 'false' }}
+        run: |
+          echo "🔍 Starting AI triage with Bing search capabilities..."
+          echo "Project endpoint: $PROJECT_ENDPOINT"
+          echo "Model deployment: $MODEL_DEPLOYMENT_NAME"
+          echo "Bing connection: $AZURE_BING_CONNECTION_ID"
+          python scripts/triage_enhanced.py ${{ github.event.issue.number }}
+
+      - name: Process Comment Commands
+        if: github.event_name == 'issue_comment'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if echo "${{ github.event.comment.body }}" | grep -E "^/(override-classification|assign|mark-as-cri|create-repair-item|mark-duplicate|request-info)"; then
+            python scripts/comment_commands.py ${{ github.event.issue.number }} ${{ github.event.comment.id }}
+          fi
