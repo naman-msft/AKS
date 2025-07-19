@@ -10,6 +10,8 @@ on:
 permissions:
   id-token: write       # allow OIDC federation
   contents: read        # for checkout
+  issues: write         # ← ADD THIS
+  pull-requests: write  # ← ADD THIS
 
 jobs:
   triage:
